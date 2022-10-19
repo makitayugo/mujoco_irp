@@ -249,9 +249,51 @@ class SimEnvironment:
             self._get_viewer(self.render_mode).render()
 
 
-if __name__ == '__main__':
-    # Run
-    env = SimEnvironment()
-    while True:
-        env.step(env.action_space.sample())
-        env.render()
+@hydra.main(config_path="config", config_name=pathlib.Path(__file__).stem)
+def main(cfg: DictConfig) -> None:
+    if not cfg.offline:
+        wandb.init(**cfg.wandb)
+    abs_zarr_path = to_absolute_path(cfg.setup.zarr_path)
+    rope_goal_dict = select_rope_and_goals(
+        zarr_path=abs_zarr_path,
+        **cfg.setup.selection)
+    config = OmegaConf.to_container(cfg, resolve=True)
+    output_dir = os.getcwd()
+    config['output_dir'] = output_dir
+    yaml.dump(config, open('config.yaml', 'w'), default_flow_style=False)
+    if not cfg.offline:
+        wandb.config.update(config)
+
+    root = zarr.open(abs_zarr_path, 'r')
+    init_action_array = root['train_rope/best_action_coord']
+    action_scale = np.array(root[cfg.setup.name].shape[2:5])
+    sample_grid = VirtualSampleGrid.from_zarr_group(root)
+
+    # load action model
+    device = torch.device('cuda', cfg.action.gpu_id)
+    dtype = torch.float16 if cfg.action.use_fp16 else torch.float32
+    sampler = DeltaActionGaussianSampler(**cfg.action.sampler)
+    action_model = DeltaTrajectoryDeeplab.load_from_checkpoint(
+        to_absolute_path(cfg.action.ckpt_path))
+    action_model_gpu = action_model.to(
+        device, dtype=dtype).eval()
+    selector = DeltaActionSelector(
+        model=action_model_gpu, **cfg.action.selector)
+
+    # load action model
+    ropes_log = list()
+    for rope_id, goals in rope_goal_dict.items():
+        rope_config = {
+            'length': sample_grid.dim_samples[0][rope_id[0]],
+            'density': sample_grid.dim_samples[1][rope_id[1]]
+        }
+        env = SimEnvironment(
+            env_cfg=cfg.env,
+            rope_cfg=rope_config)
+        while True:
+            env.step(env.action_space.sample())
+            env.render()
+
+
+if __name__ == "__main__":
+    main()
