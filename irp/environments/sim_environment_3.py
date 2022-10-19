@@ -45,11 +45,11 @@ def get_param_dict(length, density,
         'ee_offset': stick_length
     }
     return param_dict
-    def render(self):
-        """
-        Render a frame from the MuJoCo simulation as specified by the render_mode.
-        """
-        raise NotImplementedError
+    # def render(self):
+    #     """
+    #     Render a frame from the MuJoCo simulation as specified by the render_mode.
+    #     """
+    #     raise NotImplementedError
 
 class SimEnvironment:
     def __init__(self, env_cfg: DictConfig, rope_cfg: DictConfig):
@@ -187,15 +187,15 @@ class SimEnvironment:
         }
         return observation, loss, done, info
 
-    # def render(self):
-    #     """
-    #     Render a frame from the MuJoCo simulation as specified by the render_mode.
-    #     """
-    #     raise NotImplementedError
+    def render(self):
+        """
+        Render a frame from the MuJoCo simulation as specified by the render_mode.
+        """
+        raise NotImplementedError
 
 if __name__ == '__main__':
     # Run
     env = SimEnvironment()
     while True:
         env.step(env.action_space.sample())
-        MuJocoPyEnv.render()
+        env.render()
