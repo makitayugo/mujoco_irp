@@ -188,10 +188,51 @@ class SimEnvironment:
         return observation, loss, done, info
 
     def render(self):
-        """
-        Render a frame from the MuJoCo simulation as specified by the render_mode.
-        """
-        raise NotImplementedError
+        if self.render_mode is None:
+            gym.logger.warn(
+                "You are calling render method without specifying any render mode. "
+                "You can specify the render_mode at initialization, "
+                f'e.g. gym("{self.spec.id}", render_mode="rgb_array")'
+            )
+            return
+
+        width, height = self.width, self.height
+        camera_name, camera_id = self.camera_name, self.camera_id
+        if self.render_mode in {"rgb_array", "depth_array"}:
+            if camera_id is not None and camera_name is not None:
+                raise ValueError(
+                    "Both `camera_id` and `camera_name` cannot be"
+                    " specified at the same time."
+                )
+
+            no_camera_specified = camera_name is None and camera_id is None
+            if no_camera_specified:
+                camera_name = "track"
+
+            if camera_id is None and camera_name in self.model._camera_name2id:
+                if camera_name in self.model._camera_name2id:
+                    camera_id = self.model.camera_name2id(camera_name)
+
+                self._get_viewer(self.render_mode).render(
+                    width, height, camera_id=camera_id
+                )
+
+        if self.render_mode == "rgb_array":
+            data = self._get_viewer(self.render_mode).read_pixels(
+                width, height, depth=False
+            )
+            # original image is upside-down, so flip it
+            return data[::-1, :, :]
+        elif self.render_mode == "depth_array":
+            self._get_viewer(self.render_mode).render(width, height)
+            # Extract depth part of the read_pixels() tuple
+            data = self._get_viewer(self.render_mode).read_pixels(
+                width, height, depth=True
+            )[1]
+            # original image is upside-down, so flip it
+            return data[::-1, :]
+        elif self.render_mode == "human":
+            self._get_viewer(self.render_mode).render()
 
 if __name__ == '__main__':
     # Run
