@@ -1,6 +1,7 @@
 from typing import Tuple, Optional
 
 import numpy as np
+import mujoco_py
 from scipy.interpolate import interp1d
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
@@ -16,19 +17,15 @@ from common.urscript_control_util import get_movej_trajectory
 from common.template_util import require_xml
 from common.cv_util import get_traj_occupancy
 from common.sample_util import (GridCoordTransformer, get_nd_index_volume)
-from gym.envs.mujoco import MuJocoPyEnv #renderよびだし
-from gym import error, logger, spaces
-from gym.spaces import Space
-#from gym.envs.mujoco import MuJocoPyEnv
-from mujoco_py import load_model_from_xml, MjSim, MjViewer
 
 
 def deg_to_rad(deg):
     return deg / 180 * np.pi
 
-def get_param_dict(length, density, 
-        width=0.02, stick_length=0.48, 
-        num_nodes=25, **kwargs):
+
+def get_param_dict(length, density,
+                   width=0.02, stick_length=0.48,
+                   num_nodes=25, **kwargs):
     stiffness = 0.01 / 0.015 * density
     damping = 0.005 / 0.015 * density
 
@@ -45,15 +42,14 @@ def get_param_dict(length, density,
         'ee_offset': stick_length
     }
     return param_dict
-    # def render(self):
-    #     """
-    #     Render a frame from the MuJoCo simulation as specified by the render_mode.
-    #     """
-    #     raise NotImplementedError
+
 
 class SimEnvironment:
-    def __init__(self, env_cfg: DictConfig, rope_cfg: DictConfig):
+    def __init__(self, env_cfg: DictConfig, rope_cfg: DictConfig, render_mode: str):
         self.env_cfg = env_cfg
+        self.render_mode = render_mode
+        self._viewers = {}
+        self.viewer = None
 
         # create transformer
         transformer = GridCoordTransformer(**env_cfg.transformer)
@@ -62,16 +58,16 @@ class SimEnvironment:
         xml_dir = to_absolute_path(env_cfg.xml_dir)
         rope_param_dict = get_param_dict(**rope_cfg)
         xml_fname = require_xml(
-            xml_dir, rope_param_dict, 
+            xml_dir, rope_param_dict,
             to_absolute_path(env_cfg.template_path), force=True)
-        
+
         # load mujoco environment
         robot_config = MujocoConfig(
-            xml_file=xml_fname, 
+            xml_file=xml_fname,
             folder=xml_dir)
-        interface = Mujoco(robot_config, 
-            dt=env_cfg.sim.dt, 
-            visualize=env_cfg.sim.visualize)
+        interface = Mujoco(robot_config,
+                           dt=env_cfg.sim.dt,
+                           visualize=env_cfg.sim.visualize)
         interface.connect()
         ctrlr = Joint(robot_config, kp=env_cfg.sim.kp)
 
@@ -97,7 +93,7 @@ class SimEnvironment:
         self.goal_pix = tuple(goal_pix)
 
     def step(self, action: np.ndarray
-            ) -> Tuple[np.ndarray, float, bool, dict]:
+             ) -> Tuple[np.ndarray, float, bool, dict]:
         interface = self.interface
         rope_body_ids = self.rope_body_ids
         ctrlr = self.ctrlr
@@ -107,12 +103,12 @@ class SimEnvironment:
             raise RuntimeError('Please call set_goal before step.')
 
         eps = 1e-7
-        action = np.clip(action, 0, 1-eps)
+        action = np.clip(action, 0, 1 - eps)
         # compute action
         ac = self.env_cfg.action
-        speed_interp = interp1d([0,1], ac.speed_range)
-        j2_interp = interp1d([0,1], ac.j2_delta_range)
-        j3_interp = interp1d([0,1], ac.j3_delta_range)
+        speed_interp = interp1d([0, 1], ac.speed_range)
+        j2_interp = interp1d([0, 1], ac.j2_delta_range)
+        j3_interp = interp1d([0, 1], ac.j3_delta_range)
         speed = speed_interp(action[0])
         j2_delta = j2_interp(action[1])
         j3_delta = j3_interp(action[2])
@@ -129,19 +125,19 @@ class SimEnvironment:
         j_end[3] += j3_delta
 
         q_target = get_movej_trajectory(
-            j_start=j_start, j_end=j_end, 
+            j_start=j_start, j_end=j_end,
             acceleration=ac.acceleration, speed=speed, dt=sc.dt)
         qdot_target = np.gradient(q_target, sc.dt, axis=0)
 
         # run simulation
         set_mujoco_state(interface.sim, init_state)
-        
+
         impulses = np.multiply.outer(
             np.linspace(0, 1, len(rope_body_ids)),
             np.array([impulse, 0, 0]))
         apply_impulse_com_batch(
-            sim=interface.sim, 
-            body_ids=rope_body_ids, 
+            sim=interface.sim,
+            body_ids=rope_body_ids,
             impulses=impulses)
 
         num_sim_steps = int(sc.sim_duration / sc.dt)
@@ -150,7 +146,7 @@ class SimEnvironment:
         for i in range(num_sim_steps):
             feedback = interface.get_feedback()
 
-            idx = min(i, len(q_target)-1)
+            idx = min(i, len(q_target) - 1)
             u = ctrlr.generate(
                 q=feedback['q'],
                 dq=feedback['dq'],
@@ -170,7 +166,7 @@ class SimEnvironment:
             interface.send_forces(u)
 
         this_data = np.array(rope_history, dtype=np.float32)
-        traj_img = get_traj_occupancy(this_data[:,[0,2]], self.transformer)
+        traj_img = get_traj_occupancy(this_data[:, [0, 2]], self.transformer)
 
         img_coords = get_nd_index_volume(traj_img.shape)
         traj_coords = img_coords[traj_img]
@@ -186,6 +182,24 @@ class SimEnvironment:
             'action': action
         }
         return observation, loss, done, info
+
+    def _get_viewer(
+        self, mode
+    ) -> Union["mujoco_py.MjViewer", "mujoco_py.MjRenderContextOffscreen"]:
+        self.viewer = self._viewers.get(mode)
+        if self.viewer is None:
+            if mode == "human":
+                self.viewer = mujoco_py.MjViewer(self.env_cfg.sim)
+
+            elif mode in {"rgb_array", "depth_array"}:
+                self.viewer = mujoco_py.MjRenderContextOffscreen(self.env_cfg,sim, -1)
+            else:
+                raise AttributeError(
+                    f"Unknown mode: {mode}, expected modes: {self.metadata['render_modes']}"
+                )
+
+            self.viewer_setup()
+            self._viewers[mode] = self.viewer
 
     def render(self):
         if self.render_mode is None:
@@ -233,6 +247,7 @@ class SimEnvironment:
             return data[::-1, :]
         elif self.render_mode == "human":
             self._get_viewer(self.render_mode).render()
+
 
 if __name__ == '__main__':
     # Run
