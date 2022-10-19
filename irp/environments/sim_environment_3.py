@@ -16,7 +16,7 @@ from common.urscript_control_util import get_movej_trajectory
 from common.template_util import require_xml
 from common.cv_util import get_traj_occupancy
 from common.sample_util import (GridCoordTransformer, get_nd_index_volume)
-from gym.envs.mujoco import MuJocoPyEnv
+from gym.envs.mujoco import MuJocoPyEnv #renderよびだし
 from gym import error, logger, spaces
 from gym.spaces import Space
 #from gym.envs.mujoco import MuJocoPyEnv
