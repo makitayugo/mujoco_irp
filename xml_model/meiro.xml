@@ -1,0 +1,88 @@
+<mujoco>
+  <compiler meshdir="asset" texturedir="asset"/>
+  <statistic extent="1.5" meansize=".05"/>
+
+  <option timestep="0.005" jacobian="sparse"/>
+
+  <visual>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <quality shadowsize="4096"/>
+    <map stiffness="700" shadowscale="0.5" fogstart="10" fogend="15" zfar="40" haze="0.3"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="512"/>
+    <texture name="texplane" type="2d" builtin="checker" rgb1=".2 .3 .4" rgb2=".1 0.15 0.2"
+      width="512" height="512" mark="cross" markrgb=".8 .8 .8"/>
+    <texture name="texcarpet" type="2d" file="carpet.png"/>
+    <texture name="texsponge" type="2d" file="sponge.png"/>
+    <texture name="texmarble" type="cube" file="marble.png"/>
+
+    <material name="matplane" reflectance="0.3" texture="texplane" texrepeat="1 1" texuniform="true"/>
+    <material name="matcarpet" texture="texcarpet"/>
+    <material name="matsponge" texture="texsponge" specular="0.3"/>
+    <material name="matmarble" texture="texmarble" rgba=".7 .7 .7 1"/>
+  </asset>
+
+  <worldbody>
+    <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5.0" dir="0 0 -1" castshadow="false"/>
+    <light directional="true" diffuse=".6 .6 .6" specular="0.2 0.2 0.2" pos="0 0 4" dir="0 0 -1"/>
+
+    <geom name="ground" type="plane" size="0 0 1" pos="0 0 0" quat="1 0 0 0" material="matplane" condim="1"/>
+    <!--uhen-->
+    <body mocap="true" pos="0.85 1.25 0" zaxis="0 0 1">
+      <geom type="box" size=".15 0.75 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--kahen-->
+    <body mocap="true" pos="0 0.1 0" zaxis="0 0 1">
+      <geom type="box" size="1 0.05 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--zyouhen-->
+    <body mocap="true" pos="0 2 0" zaxis="0 0 1">
+      <geom type="box" size="1 0.1 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--migisita-->
+    <body mocap="true" pos="0 0.5 0" zaxis="0 0 1">
+      <geom type="box" size=".075 0.4 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--migiue-->
+    <body mocap="true" pos="0.4 1.4 0" zaxis="0 0 1">
+      <geom type="box" size=".075 0.65 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--hidariue-->
+    <body mocap="true" pos="-0.4 0.95 0" zaxis="0 0 1">
+      <geom type="box" size=".075 0.6 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--sahen-ue-->
+    <body mocap="true" pos="-0.9 1.75 0" zaxis="0 0 1">
+      <geom type="box" size=".09 0.15 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--sahen-sita-->
+    <body mocap="true" pos="-0.9 0.75 0" zaxis="0 0 1">
+      <geom type="box" size=".09 0.6 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+    <!--tyuuou-->
+    <body mocap="true" pos="0.15 1.5 0" zaxis="0 0 1">
+      <geom type="box" size="0.25 0.05 0.5" material="matmarble" group="1" condim="1"/>
+    </body>
+
+  </worldbody>
+
+
+
+  <option timestep="0.002" jacobian="dense"/>
+
+  <size nconmax="100" njmax="300" nstack="50000"/>
+
+  <worldbody>
+    <body name="B10" pos="1 0.3 -0.5">
+      
+      <composite type="cable" curve="s" count="41 1 1" size="3" offset="0 0 .6" initial="none">
+        <joint kind="main" damping="1"/>
+        <geom type="capsule" size=".03 .05" rgba=".8 .2 .1 1"/>
+      </composite>
+    </body>
+    
+  </worldbody>
+
+</mujoco>
